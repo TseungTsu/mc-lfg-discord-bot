@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # Discord Game Scheduler Bot
 
 A Discord bot for organizing pickup games. One person posts that they're looking
@@ -255,3 +256,6 @@ This runs as a long-lived Node process — it needs to stay running to receive
 Discord events. For 24/7 uptime, run it on a small VPS, a Raspberry Pi, or a
 host like Railway/Fly.io/Render with a persistent volume for `games.db` (or
 swap in a hosted Postgres if you'd rather not deal with a volume).
+=======
+# mc-lfg-discord-bot
+>>>>>>> 0ee8f7310244da4586577c0c5b71c59851ada6e4
