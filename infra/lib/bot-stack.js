@@ -43,7 +43,9 @@ class BotStack extends cdk.Stack {
     userData.addCommands(
       'dnf update -y',
       'dnf install -y git',
-      'curl -fsSL https://rpm.nodesource.com/setup_20.x | bash -',
+      // better-sqlite3's prebuilt binaries require Node >=22; on Node 20
+      // they load but segfault as soon as a native call is made.
+      'curl -fsSL https://rpm.nodesource.com/setup_22.x | bash -',
       // gcc-c++/make/python3 are a fallback in case no prebuilt better-sqlite3
       // binary matches this AMI's node/arch, so npm can build it from source.
       'dnf install -y nodejs gcc-c++ make python3',
