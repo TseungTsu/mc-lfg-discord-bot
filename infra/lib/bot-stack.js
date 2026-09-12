@@ -17,7 +17,7 @@ class BotStack extends cdk.Stack {
 
     const securityGroup = new ec2.SecurityGroup(this, 'BotSecurityGroup', {
       vpc,
-      description: 'mc-lfg-bot host — no inbound ports, outbound only',
+      description: 'mc-lfg-bot host - no inbound ports, outbound only',
       allowAllOutbound: true,
     });
 

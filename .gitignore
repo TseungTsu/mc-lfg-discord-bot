@@ -6,3 +6,4 @@ games.db-wal
 games.db-shm
 infra/node_modules/
 infra/cdk.out/
+infra/cdk.context.json
