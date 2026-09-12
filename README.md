@@ -1,9 +1,13 @@
-<<<<<<< HEAD
 # Discord Game Scheduler Bot
 
 A Discord bot for organizing pickup games. One person posts that they're looking
 for a game on a given day/time/location, others click a button to say they can
 make it, and the original requester clicks a button to confirm the game is on.
+
+> **Just want to add an already-running copy of this bot to your server?**
+> This README is for developers running/hosting the bot. See
+> [docs/adding-the-bot.md](docs/adding-the-bot.md) instead — no coding
+> involved.
 
 ## Features
 
@@ -20,9 +24,11 @@ make it, and the original requester clicks a button to confirm the game is on.
   with the list of people who are in, each with their army if they gave one.
   Clicking the button again (after already being in) removes your RSVP.
 - **"Accept game" button** — Only the original requester can click this. It
-  locks the post as confirmed (✅) and disables further RSVPs.
+  locks the post as confirmed (✅), disables further RSVPs, and pings
+  everyone who RSVP'd in a follow-up message so they know it's on.
 - **"Cancel" button** — Only the original requester can click this to cancel
-  the game (🚫).
+  the game (🚫). Also pings everyone who RSVP'd so they know it fell
+  through.
 - **`/games`** — Lists every currently open game in the server, with a jump
   link to each post, so people don't have to scroll to find them.
 
@@ -256,6 +262,3 @@ This runs as a long-lived Node process — it needs to stay running to receive
 Discord events. For 24/7 uptime, run it on a small VPS, a Raspberry Pi, or a
 host like Railway/Fly.io/Render with a persistent volume for `games.db` (or
 swap in a hosted Postgres if you'd rather not deal with a volume).
-=======
-# mc-lfg-discord-bot
->>>>>>> 0ee8f7310244da4586577c0c5b71c59851ada6e4

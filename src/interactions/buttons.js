@@ -52,6 +52,14 @@ async function handleButton(interaction) {
       }
       db.setStatus(game.id, 'confirmed');
       await refresh(interaction, game.id);
+
+      const rsvps = db.getRsvps(game.id);
+      if (rsvps.length > 0) {
+        const mentions = rsvps.map(r => `<@${r.userId}>`).join(' ');
+        await interaction.followUp({
+          content: `✅ Game #${game.id} at ${game.location} (<t:${game.scheduled_at}:F>) is confirmed! ${mentions}`,
+        });
+      }
       break;
     }
 
@@ -62,6 +70,14 @@ async function handleButton(interaction) {
       }
       db.setStatus(game.id, 'cancelled');
       await refresh(interaction, game.id);
+
+      const cancelledRsvps = db.getRsvps(game.id);
+      if (cancelledRsvps.length > 0) {
+        const mentions = cancelledRsvps.map(r => `<@${r.userId}>`).join(' ');
+        await interaction.followUp({
+          content: `🚫 Game #${game.id} at ${game.location} (<t:${game.scheduled_at}:F>) has been cancelled. ${mentions}`,
+        });
+      }
       break;
     }
 
