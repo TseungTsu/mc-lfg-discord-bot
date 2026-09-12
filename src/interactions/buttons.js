@@ -12,13 +12,13 @@ async function handleButton(interaction) {
     return;
   }
 
-  if (game.status !== 'open') {
-    await interaction.reply({ content: 'This game is no longer open.', ephemeral: true });
-    return;
-  }
-
   switch (action) {
     case 'rsvp': {
+      if (game.status !== 'open') {
+        await interaction.reply({ content: 'This game is no longer open.', ephemeral: true });
+        return;
+      }
+
       if (db.hasRsvp(game.id, interaction.user.id)) {
         // Already in — clicking again backs out.
         db.removeRsvp(game.id, interaction.user.id);
@@ -46,6 +46,10 @@ async function handleButton(interaction) {
     }
 
     case 'accept': {
+      if (game.status !== 'open') {
+        await interaction.reply({ content: 'This game is no longer open.', ephemeral: true });
+        return;
+      }
       if (interaction.user.id !== game.requester_id) {
         await interaction.reply({ content: 'Only the person who posted this game can accept it.', ephemeral: true });
         return;
@@ -64,18 +68,31 @@ async function handleButton(interaction) {
     }
 
     case 'cancel': {
-      if (interaction.user.id !== game.requester_id) {
-        await interaction.reply({ content: 'Only the person who posted this game can cancel it.', ephemeral: true });
+      if (game.status !== 'open' && game.status !== 'confirmed') {
+        await interaction.reply({ content: 'This game is no longer open.', ephemeral: true });
         return;
       }
+
+      const isRequester = interaction.user.id === game.requester_id;
+      // Once a game is confirmed, any of the players who RSVP'd can also
+      // back out on everyone's behalf if they can't make it after all.
+      const canBackOutConfirmed = game.status === 'confirmed' && db.hasRsvp(game.id, interaction.user.id);
+
+      if (!isRequester && !canBackOutConfirmed) {
+        await interaction.reply({ content: 'Only the requester can cancel this game.', ephemeral: true });
+        return;
+      }
+
+      const cancelledRsvps = db.getRsvps(game.id);
       db.setStatus(game.id, 'cancelled');
       await refresh(interaction, game.id);
 
-      const cancelledRsvps = db.getRsvps(game.id);
-      if (cancelledRsvps.length > 0) {
-        const mentions = cancelledRsvps.map(r => `<@${r.userId}>`).join(' ');
+      const notifyIds = new Set([game.requester_id, ...cancelledRsvps.map(r => r.userId)]);
+      notifyIds.delete(interaction.user.id);
+      if (notifyIds.size > 0) {
+        const mentions = [...notifyIds].map(id => `<@${id}>`).join(' ');
         await interaction.followUp({
-          content: `🚫 Game #${game.id} at ${game.location} (<t:${game.scheduled_at}:F>) has been cancelled. ${mentions}`,
+          content: `🚫 Game #${game.id} at ${game.location} (<t:${game.scheduled_at}:F>) has been cancelled by <@${interaction.user.id}>. ${mentions}`,
         });
       }
       break;

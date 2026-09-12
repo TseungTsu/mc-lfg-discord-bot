@@ -26,9 +26,11 @@ make it, and the original requester clicks a button to confirm the game is on.
 - **"Accept game" button** — Only the original requester can click this. It
   locks the post as confirmed (✅), disables further RSVPs, and pings
   everyone who RSVP'd in a follow-up message so they know it's on.
-- **"Cancel" button** — Only the original requester can click this to cancel
-  the game (🚫). Also pings everyone who RSVP'd so they know it fell
-  through.
+- **"Cancel" button** — Before a game is confirmed, only the requester can
+  cancel it. Once confirmed, any player who RSVP'd can also cancel on
+  everyone's behalf if they can't make it after all. Either way it marks
+  the post cancelled (🚫) and pings the requester and everyone who RSVP'd
+  (except whoever clicked) so they know it fell through.
 - **`/games`** — Lists every currently open game in the server, with a jump
   link to each post, so people don't have to scroll to find them.
 

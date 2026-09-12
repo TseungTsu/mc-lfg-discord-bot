@@ -47,9 +47,22 @@ function buildGameEmbed(game, rsvps) {
 }
 
 function buildGameComponents(game) {
-  if (game.status !== 'open') {
-    // Confirmed or cancelled games are locked — no more actions.
+  if (game.status === 'cancelled') {
+    // Terminal state — nothing left to do.
     return [];
+  }
+
+  if (game.status === 'confirmed') {
+    // RSVPs are locked in once confirmed — the only action left is
+    // backing out if the requester or a player can't make it after all.
+    const row = new ActionRowBuilder().addComponents(
+      new ButtonBuilder()
+        .setCustomId(`cancel:${game.id}`)
+        .setLabel("Can't make it — cancel game")
+        .setStyle(ButtonStyle.Danger)
+        .setEmoji('🗑️'),
+    );
+    return [row];
   }
 
   const row = new ActionRowBuilder().addComponents(
