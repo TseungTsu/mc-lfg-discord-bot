@@ -9,9 +9,19 @@ const MONTH_NAMES = [
   'july', 'august', 'september', 'october', 'november', 'december',
 ];
 
-// Returns { day, month?, year? } or null. month is 0-indexed when present.
+const WEEKDAY_NAMES = [
+  'sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday',
+];
+
+// Returns { day, month?, year? } or { weekday } or null. month is 0-indexed when present.
 function parseDay(input) {
   const raw = input.trim().toLowerCase();
+
+  // Weekday name or shorthand: "sunday", "sun", "tue", "thurs"
+  if (/^[a-z]+$/.test(raw) && raw.length >= 3) {
+    const weekdayIdx = WEEKDAY_NAMES.findIndex(name => name.startsWith(raw));
+    if (weekdayIdx !== -1) return { weekday: weekdayIdx };
+  }
 
   // ISO: 2026-09-20
   let m = raw.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
@@ -45,6 +55,9 @@ function parseDay(input) {
 function parseTime(input) {
   const raw = input.trim().toLowerCase().replace(/\s+/g, '');
 
+  if (raw === 'noon') return { hour: 12, minute: 0 };
+  if (raw === 'midnight') return { hour: 0, minute: 0 };
+
   // 10:00, 10:00am, 3:30pm, 15:30
   let m = raw.match(/^(\d{1,2}):(\d{2})(am|pm)?$/);
   if (m) return applyMeridiem(Number(m[1]), Number(m[2]), m[3]);
@@ -57,9 +70,15 @@ function parseTime(input) {
   m = raw.match(/^(\d{3,4})$/);
   if (m) {
     const digits = m[1].padStart(4, '0');
-    const hour = Number(digits.slice(0, 2));
+    let hour = Number(digits.slice(0, 2));
     const minute = Number(digits.slice(2));
-    if (hour <= 23 && minute <= 59) return { hour, minute };
+    if (hour <= 23 && minute <= 59) {
+      // No am/pm given, so the hour alone is ambiguous. Game stores are only
+      // open 10:00-22:00, and any hour under 10 falls outside that window as
+      // AM but lands inside it as PM, so assume PM in that case.
+      if (hour < 10) hour += 12;
+      return { hour, minute };
+    }
   }
 
   return null;
@@ -89,6 +108,16 @@ function resolveSchedule(dayInput, timeInput, referenceDate = new Date()) {
 
   const { hour, minute } = timeParts;
   const now = referenceDate;
+
+  if (dayParts.weekday !== undefined) {
+    let candidate = new Date(now.getFullYear(), now.getMonth(), now.getDate(), hour, minute, 0, 0);
+    const diffDays = (dayParts.weekday - candidate.getDay() + 7) % 7;
+    candidate.setDate(candidate.getDate() + diffDays);
+    if (candidate.getTime() < now.getTime()) {
+      candidate.setDate(candidate.getDate() + 7);
+    }
+    return { date: candidate };
+  }
 
   if (dayParts.month !== undefined) {
     const year = dayParts.year ?? now.getFullYear();
