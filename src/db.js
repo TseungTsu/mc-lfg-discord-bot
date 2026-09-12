@@ -86,10 +86,12 @@ function getRsvps(gameId) {
     .map(r => ({ userId: r.user_id, army: r.army }));
 }
 
+// Open games whose time has already passed were never accepted, so they
+// no longer belong in the list — drop them instead of showing stale slots.
 function listOpenGames(guildId) {
   return db.prepare(`
-    SELECT * FROM games WHERE guild_id = ? AND status = 'open' ORDER BY scheduled_at ASC
-  `).all(guildId);
+    SELECT * FROM games WHERE guild_id = ? AND status = 'open' AND scheduled_at >= ? ORDER BY scheduled_at ASC
+  `).all(guildId, Math.floor(Date.now() / 1000));
 }
 
 module.exports = {
