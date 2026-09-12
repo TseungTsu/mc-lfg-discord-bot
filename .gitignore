@@ -4,3 +4,5 @@ games.db
 games.db-journal
 games.db-wal
 games.db-shm
+infra/node_modules/
+infra/cdk.out/
