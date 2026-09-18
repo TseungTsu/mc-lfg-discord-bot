@@ -12,7 +12,12 @@ make it, and the original requester clicks a button to confirm the game is on.
 ## Features
 
 - **`/lfg day time location [army] [mission] [note]`** — Posts an embed
-  announcing you're looking for a game. Anyone in the channel can see it.
+  announcing you're looking for an **in-person** game. Anyone in the channel
+  can see it.
+- **`/lfgtts day time [army] [mission] [note]`** — Same thing for
+  **Tabletop Simulator** games. No `location`, since it's online. In-person
+  and TTS games are kept completely separate: each has its own post style,
+  its own list command, and (optionally) its own channel.
   - `day` and `time` accept loose, human formats (see below) and are shown
     as a proper formatted date/time, auto-converted to each viewer's own
     Discord timezone setting — no more "12 at 1000."
@@ -31,11 +36,16 @@ make it, and the original requester clicks a button to confirm the game is on.
   everyone's behalf if they can't make it after all. Either way it marks
   the post cancelled (🚫) and pings the requester and everyone who RSVP'd
   (except whoever clicked) so they know it fell through.
-- **`/games`** — Lists every currently open game in the server, with a jump
-  link to each post, so people don't have to scroll to find them.
+- **`/games`** — Lists every currently open **in-person** game in the server,
+  with a jump link to each post, so people don't have to scroll to find them.
+- **`/gamestts`** — Same, but only open **Tabletop Simulator** games. Neither
+  list ever shows the other kind.
 
 Games and RSVPs are stored in a local SQLite database (`games.db`), so nothing
-is lost if the bot restarts.
+is lost if the bot restarts. In-person and TTS games share one table, tagged
+with a `mode` column (`in_person` or `tts`); the list commands filter on it.
+An existing `games.db` is upgraded automatically on startup — earlier games
+are kept and treated as in-person.
 
 ### Accepted day/time formats
 
@@ -144,6 +154,13 @@ Edit `.env` and fill in:
 - `GUILD_ID` (optional) — your server's ID, if you want slash commands to
   show up instantly in just that server while testing. Leave blank to
   register commands globally (can take up to an hour the first time).
+- `LFG_CHANNEL_ID` (optional) — restricts `/lfg` to one channel. Anywhere
+  else, the bot privately tells the user which channel to use. Blank =
+  allowed everywhere.
+- `LFG_TTS_CHANNEL_ID` (optional) — same, for `/lfgtts`.
+
+To get a channel ID: with Developer Mode on (see below), right-click the
+channel and click "Copy Channel ID".
 
 To get a server ID: enable Developer Mode in Discord (the gear icon for User
 Settings -> Advanced -> toggle Developer Mode on), then right-click your
@@ -200,10 +217,13 @@ src/
   deploy-commands.js    Registers slash commands with Discord
   db.js                 SQLite persistence (games + rsvps)
   embeds.js             Builds the embed + buttons shown for a game
+  lfgShared.js          Logic shared by the in-person and TTS commands
   parseDateTime.js      Parses the loose day/time input into a real Date
   commands/
-    lfg.js              /lfg — post a new game
-    games.js            /games — list open games
+    lfg.js              /lfg — post a new in-person game
+    lfgtts.js           /lfgtts — post a new Tabletop Simulator game
+    games.js            /games — list open in-person games
+    gamestts.js         /gamestts — list open TTS games
   interactions/
     buttons.js          Handles RSVP (+ army modal) / Accept / Cancel clicks
 ```
@@ -217,8 +237,9 @@ src/
 - **Add a max player count**: add a `maxPlayers` option to `/lfg`, store it
   on the game row in `db.js`, and check `rsvps.length` before allowing more
   RSVPs in `buttons.js`.
-- **Post to a specific channel only**: restrict where `/lfg` can be run by
-  checking `interaction.channelId` in `lfg.js`, or configure it per-server.
+- **Post to a specific channel only**: set `LFG_CHANNEL_ID` /
+  `LFG_TTS_CHANNEL_ID` in `.env` (see above). The check lives in
+  `executeLfg` in `src/lfgShared.js`.
 
 ## Troubleshooting
 

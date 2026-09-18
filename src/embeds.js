@@ -6,8 +6,25 @@ const STATUS_META = {
   cancelled: { color: 0xed4245, title: '🚫 Game cancelled' },
 };
 
+const MODE_LABELS = {
+  in_person: 'In Person',
+  tts: 'Tabletop Simulator',
+};
+
+// Only the "open" title differs by mode; confirmed/cancelled read the same.
+const TTS_OPEN_TITLE = '🖥️ Looking for a Tabletop Simulator game';
+
+// Short description of a game for follow-up messages, e.g. "Game #4 at Main
+// St Courts" or "Game #5 (Tabletop Simulator)".
+function gameLabel(game) {
+  return game.location
+    ? `Game #${game.id} at ${game.location}`
+    : `Game #${game.id} (${MODE_LABELS[game.mode] || game.mode})`;
+}
+
 function buildGameEmbed(game, rsvps) {
   const meta = STATUS_META[game.status] || STATUS_META.open;
+  const title = game.status === 'open' && game.mode === 'tts' ? TTS_OPEN_TITLE : meta.title;
 
   // <t:seconds:F> renders as a full date+time, auto-converted to each
   // viewer's own Discord timezone setting — e.g. "Saturday, September 20,
@@ -16,13 +33,14 @@ function buildGameEmbed(game, rsvps) {
 
   const embed = new EmbedBuilder()
     .setColor(meta.color)
-    .setTitle(meta.title)
-    .addFields(
-      { name: 'When', value: when },
-      { name: 'Location', value: game.location, inline: true },
-    )
-    .setFooter({ text: `Game #${game.id}` })
+    .setTitle(title)
+    .addFields({ name: 'When', value: when })
+    .setFooter({ text: `Game #${game.id} • ${MODE_LABELS[game.mode] || game.mode}` })
     .setTimestamp(game.created_at);
+
+  if (game.location) {
+    embed.addFields({ name: 'Location', value: game.location, inline: true });
+  }
 
   if (game.army) {
     embed.addFields({ name: "Requester's army", value: game.army, inline: true });
@@ -86,4 +104,4 @@ function buildGameComponents(game) {
   return [row];
 }
 
-module.exports = { buildGameEmbed, buildGameComponents };
+module.exports = { buildGameEmbed, buildGameComponents, gameLabel };

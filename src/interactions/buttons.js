@@ -1,6 +1,6 @@
 const { ModalBuilder, TextInputBuilder, TextInputStyle, ActionRowBuilder } = require('discord.js');
 const db = require('../db');
-const { buildGameEmbed, buildGameComponents } = require('../embeds');
+const { buildGameEmbed, buildGameComponents, gameLabel } = require('../embeds');
 
 async function handleButton(interaction) {
   const [action, gameIdRaw] = interaction.customId.split(':');
@@ -61,7 +61,7 @@ async function handleButton(interaction) {
       if (rsvps.length > 0) {
         const mentions = rsvps.map(r => `<@${r.userId}>`).join(' ');
         await interaction.followUp({
-          content: `✅ Game #${game.id} at ${game.location} (<t:${game.scheduled_at}:F>) is confirmed! ${mentions}`,
+          content: `✅ ${gameLabel(game)} (<t:${game.scheduled_at}:F>) is confirmed! ${mentions}`,
         });
       }
       break;
@@ -92,7 +92,7 @@ async function handleButton(interaction) {
       if (notifyIds.size > 0) {
         const mentions = [...notifyIds].map(id => `<@${id}>`).join(' ');
         await interaction.followUp({
-          content: `🚫 Game #${game.id} at ${game.location} (<t:${game.scheduled_at}:F>) has been cancelled by <@${interaction.user.id}>. ${mentions}`,
+          content: `🚫 ${gameLabel(game)} (<t:${game.scheduled_at}:F>) has been cancelled by <@${interaction.user.id}>. ${mentions}`,
         });
       }
       break;

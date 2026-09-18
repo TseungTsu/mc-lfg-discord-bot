@@ -14,10 +14,11 @@ db.exec(`
     day           TEXT NOT NULL,
     time          TEXT NOT NULL,
     scheduled_at  INTEGER NOT NULL, -- unix seconds, resolved from day+time
-    location      TEXT NOT NULL,
+    location      TEXT NOT NULL,    -- '' for tts games, which have no physical location
     note          TEXT,
     army          TEXT,             -- requester's optional "what army" answer
     mission       TEXT,             -- requester's optional primary mission pick
+    mode          TEXT NOT NULL DEFAULT 'in_person', -- in_person | tts
     status        TEXT NOT NULL DEFAULT 'open', -- open | confirmed | cancelled
     created_at    INTEGER NOT NULL
   );
@@ -32,10 +33,18 @@ db.exec(`
   );
 `);
 
-function createGame({ guildId, channelId, requesterId, day, time, scheduledAt, location, note, army, mission }) {
+// Databases created before /lfgtts existed have no `mode` column. Add it in
+// place — every pre-existing game was an in-person one, which the default
+// covers — so upgrading doesn't require wiping games.db.
+const gameColumns = db.prepare('PRAGMA table_info(games)').all().map(c => c.name);
+if (!gameColumns.includes('mode')) {
+  db.exec("ALTER TABLE games ADD COLUMN mode TEXT NOT NULL DEFAULT 'in_person'");
+}
+
+function createGame({ guildId, channelId, requesterId, day, time, scheduledAt, location, note, army, mission, mode }) {
   const stmt = db.prepare(`
-    INSERT INTO games (guild_id, channel_id, requester_id, day, time, scheduled_at, location, note, army, mission, status, created_at)
-    VALUES (@guildId, @channelId, @requesterId, @day, @time, @scheduledAt, @location, @note, @army, @mission, 'open', @createdAt)
+    INSERT INTO games (guild_id, channel_id, requester_id, day, time, scheduled_at, location, note, army, mission, mode, status, created_at)
+    VALUES (@guildId, @channelId, @requesterId, @day, @time, @scheduledAt, @location, @note, @army, @mission, @mode, 'open', @createdAt)
   `);
   const info = stmt.run({
     guildId,
@@ -44,10 +53,11 @@ function createGame({ guildId, channelId, requesterId, day, time, scheduledAt, l
     day,
     time,
     scheduledAt,
-    location,
+    location: location || '',
     note: note || null,
     army: army || null,
     mission: mission || null,
+    mode: mode || 'in_person',
     createdAt: Date.now(),
   });
   return getGame(info.lastInsertRowid);
@@ -88,10 +98,10 @@ function getRsvps(gameId) {
 
 // Open games whose time has already passed were never accepted, so they
 // no longer belong in the list — drop them instead of showing stale slots.
-function listOpenGames(guildId) {
+function listOpenGames(guildId, mode) {
   return db.prepare(`
-    SELECT * FROM games WHERE guild_id = ? AND status = 'open' AND scheduled_at >= ? ORDER BY scheduled_at ASC
-  `).all(guildId, Math.floor(Date.now() / 1000));
+    SELECT * FROM games WHERE guild_id = ? AND mode = ? AND status = 'open' AND scheduled_at >= ? ORDER BY scheduled_at ASC
+  `).all(guildId, mode, Math.floor(Date.now() / 1000));
 }
 
 module.exports = {
