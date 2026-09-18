@@ -1,7 +1,7 @@
 const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
 
 const STATUS_META = {
-  open: { color: 0x5865f2, title: '🏀 Looking for a game' },
+  open: { color: 0x5865f2, title: '⚔️ Looking for a game' },
   confirmed: { color: 0x57f287, title: '✅ Game confirmed!' },
   cancelled: { color: 0xed4245, title: '🚫 Game cancelled' },
 };
