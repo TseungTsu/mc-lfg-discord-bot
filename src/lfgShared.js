@@ -6,7 +6,15 @@
 const { EmbedBuilder } = require('discord.js');
 const db = require('./db');
 const { buildGameEmbed, buildGameComponents } = require('./embeds');
-const { resolveSchedule } = require('./parseDateTime');
+const { DEFAULT_TIMEZONE, assertValidTimeZone, resolveSchedule } = require('./parseDateTime');
+
+// Typed times are read in this one timezone, regardless of where the bot is
+// hosted (an EC2 box defaults to UTC). Fail at startup on a typo rather than
+// on the first /lfg.
+const TIMEZONE = process.env.TIMEZONE || DEFAULT_TIMEZONE;
+assertValidTimeZone(TIMEZONE);
+// "America/Denver" -> "Denver", for user-facing text.
+const TIMEZONE_LABEL = TIMEZONE.split('/').pop().replace(/_/g, ' ');
 
 const MISSION_CHOICES = [
   { name: 'Take and Hold', value: 'Take and Hold' },
@@ -19,12 +27,16 @@ const MISSION_CHOICES = [
 // Adds day/time/[location]/army/mission/note options to a
 // SlashCommandBuilder and returns it. Required options must come before
 // optional ones, which is why location sits between time and army.
-function addLfgOptions(builder, { includeLocation }) {
+function addLfgOptions(builder, { includeLocation, requireMeridiem }) {
+  const timeDescription = requireMeridiem
+    ? `e.g. 10pm, 10:30pm, or 2200 - am/pm required (${TIMEZONE_LABEL} time)`
+    : `e.g. 3:00 PM, 3pm, or 1500 (${TIMEZONE_LABEL} time)`;
+
   builder
     .addStringOption(opt =>
-      opt.setName('day').setDescription('e.g. 9/20, September 20, or just 20').setRequired(true))
+      opt.setName('day').setDescription('e.g. 9/20, September 20, Saturday, or just 20').setRequired(true))
     .addStringOption(opt =>
-      opt.setName('time').setDescription('e.g. 3:00 PM, 3pm, or 1500').setRequired(true));
+      opt.setName('time').setDescription(timeDescription).setRequired(true));
 
   if (includeLocation) {
     builder.addStringOption(opt =>
@@ -49,7 +61,9 @@ function addLfgOptions(builder, { includeLocation }) {
 //   channelEnvVar    - .env var holding the one channel this command may be
 //                      used in (e.g. 'LFG_CHANNEL_ID'). Unset = any channel.
 //   wrongChannelHint - human text for the "wrong channel" reply
-async function executeLfg(interaction, { mode, requireLocation, channelEnvVar, wrongChannelHint }) {
+//   requireMeridiem  - reject times that could be AM or PM ("1000") instead
+//                      of guessing; used for TTS, where games run late at night
+async function executeLfg(interaction, { mode, requireLocation, channelEnvVar, wrongChannelHint, requireMeridiem = false }) {
   const requiredChannelId = process.env[channelEnvVar];
   if (requiredChannelId && interaction.channelId !== requiredChannelId) {
     await interaction.reply({
@@ -66,15 +80,29 @@ async function executeLfg(interaction, { mode, requireLocation, channelEnvVar, w
   const mission = interaction.options.getString('mission') || null;
   const note = interaction.options.getString('note') || null;
 
-  const schedule = resolveSchedule(day, time);
+  const schedule = resolveSchedule(day, time, { timeZone: TIMEZONE, requireMeridiem });
+  if (schedule.error === 'ambiguous-time') {
+    await interaction.reply({
+      content: [
+        `I can't tell if "${time}" means AM or PM.`,
+        '',
+        'Please add am/pm, like `10pm`, `10:00pm`, or `1030pm`, or use 24-hour time like `2200`.',
+      ].join('\n'),
+      ephemeral: true,
+    });
+    return;
+  }
   if (schedule.error) {
     await interaction.reply({
       content: [
         `I couldn't understand "${day}" / "${time}" as a date and time.`,
         '',
         'Try formats like:',
-        '**day**: `9/20`, `September 20`, `Sept 20 2026`, or just `20`',
-        '**time**: `3:00 PM`, `3pm`, or `1500`',
+        '**day**: `9/20`, `September 20`, `Saturday`, or just `20`',
+        requireMeridiem
+          ? '**time**: `3pm`, `3:00pm`, `300pm`, or `1500`'
+          : '**time**: `3:00 PM`, `3pm`, or `1500`',
+        `Times are read as ${TIMEZONE_LABEL} time.`,
       ].join('\n'),
       ephemeral: true,
     });

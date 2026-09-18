@@ -6,13 +6,14 @@ module.exports = {
     new SlashCommandBuilder()
       .setName('lfgtts')
       .setDescription("Post that you're looking for a Tabletop Simulator game"),
-    { includeLocation: false },
+    { includeLocation: false, requireMeridiem: true },
   ),
 
   async execute(interaction) {
     await executeLfg(interaction, {
       mode: 'tts',
       requireLocation: false,
+      requireMeridiem: true,
       channelEnvVar: 'LFG_TTS_CHANNEL_ID',
       wrongChannelHint: 'the Tabletop Simulator games channel',
     });

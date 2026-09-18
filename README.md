@@ -50,13 +50,25 @@ are kept and treated as in-person.
 ### Accepted day/time formats
 
 - **day**: `9/20`, `9/20/2026`, `2026-09-20`, `September 20`, `Sept 20`,
-  `Sept 20 2027`, or just a bare day number like `20` (which means "the
-  next time the 20th comes around" — this month if it hasn't happened yet,
-  otherwise next month).
-- **time**: `3:00 PM`, `3pm`, `15:00`, or military-style `1500`/`930`.
+  `Sept 20 2027`, a weekday like `saturday`/`sat`, or just a bare day number
+  like `20` (which means "the next time the 20th comes around" — this month
+  if it hasn't happened yet, otherwise next month).
+- **time**: `3:00 PM`, `3pm`, `300pm`, `15:00`, `1500`, `noon`, `midnight`.
+  - **`/lfgtts` requires it to be unambiguous.** `3pm`, `3:00pm`, `300pm`,
+    `1500` and `0930` are fine; a bare `1000` or `9:30` could be AM or PM,
+    so the bot asks the user to retry with am/pm instead of guessing.
+  - **`/lfg` (in person) still guesses** for bare times: an hour under 10
+    is assumed PM (stores are open 10-10), otherwise it's read as typed —
+    so `1000` is 10 AM.
 
-If either doesn't parse, `/lfg` replies with an error (visible only to you)
-instead of posting a broken game.
+**Timezone:** all typed times are read in one community timezone —
+`America/Denver` by default, changeable with `TIMEZONE` in `.env` — no matter
+what timezone the server hosting the bot is set to. The post then shows the
+time to each viewer in their own Discord timezone, so a Denver `10pm` reads
+as 9 PM to someone in Pacific.
+
+If a day or time doesn't parse, the command replies with an error (visible
+only to you) instead of posting a broken game.
 
 ## Requirements (Windows)
 
@@ -154,6 +166,8 @@ Edit `.env` and fill in:
 - `GUILD_ID` (optional) — your server's ID, if you want slash commands to
   show up instantly in just that server while testing. Leave blank to
   register commands globally (can take up to an hour the first time).
+- `TIMEZONE` (optional) — IANA timezone that typed times are read in.
+  Defaults to `America/Denver`.
 - `LFG_CHANNEL_ID` (optional) — restricts `/lfg` to one channel. Anywhere
   else, the bot privately tells the user which channel to use. Blank =
   allowed everywhere.

@@ -6,7 +6,7 @@ module.exports = {
     new SlashCommandBuilder()
       .setName('lfg')
       .setDescription("Post that you're looking for an in-person game"),
-    { includeLocation: true },
+    { includeLocation: true, requireMeridiem: false },
   ),
 
   async execute(interaction) {
