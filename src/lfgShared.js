@@ -5,7 +5,7 @@
 
 const { EmbedBuilder } = require('discord.js');
 const db = require('./db');
-const { buildGameEmbed, buildGameComponents } = require('./embeds');
+const { buildGameEmbed, buildGameComponents, whenText } = require('./embeds');
 const { DEFAULT_TIMEZONE, assertValidTimeZone, resolveSchedule } = require('./parseDateTime');
 
 // Typed times are read in this one timezone, regardless of where the bot is
@@ -29,8 +29,8 @@ const MISSION_CHOICES = [
 // optional ones, which is why location sits between time and army.
 function addLfgOptions(builder, { includeLocation, requireMeridiem }) {
   const timeDescription = requireMeridiem
-    ? `e.g. 10pm, 10:30pm, or 2200 - am/pm required (${TIMEZONE_LABEL} time)`
-    : `e.g. 3:00 PM, 3pm, or 1500 (${TIMEZONE_LABEL} time)`;
+    ? `e.g. 10pm, 2200, or a range like 8pm-11pm - am/pm required (${TIMEZONE_LABEL} time)`
+    : `e.g. 3pm, 1500, or a range like 12-4pm (${TIMEZONE_LABEL} time)`;
 
   builder
     .addStringOption(opt =>
@@ -87,7 +87,25 @@ async function executeLfg(interaction, { mode, requireLocation, channelEnvVar, w
         `I can't tell if "${time}" means AM or PM.`,
         '',
         'Please add am/pm, like `10pm`, `10:00pm`, or `1030pm`, or use 24-hour time like `2200`.',
+        'For a range, put am/pm on at least one end, like `8-11pm` or `8pm-11pm`.',
       ].join('\n'),
+      ephemeral: true,
+    });
+    return;
+  }
+  if (schedule.error === 'overnight') {
+    await interaction.reply({
+      content: [
+        `"${time}" runs past midnight, and a game has to start and end on the same day.`,
+        'End it by midnight, like `9pm-midnight`, or post a separate game for the next day.',
+      ].join('\n'),
+      ephemeral: true,
+    });
+    return;
+  }
+  if (schedule.error === 'invalid-range') {
+    await interaction.reply({
+      content: `"${time}" starts and ends at the same time. Try a range like \`12-4pm\` or \`8pm-11pm\`.`,
       ephemeral: true,
     });
     return;
@@ -100,8 +118,8 @@ async function executeLfg(interaction, { mode, requireLocation, channelEnvVar, w
         'Try formats like:',
         '**day**: `9/20`, `September 20`, `Saturday`, or just `20`',
         requireMeridiem
-          ? '**time**: `3pm`, `3:00pm`, `300pm`, or `1500`'
-          : '**time**: `3:00 PM`, `3pm`, or `1500`',
+          ? '**time**: `3pm`, `3:00pm`, `300pm`, `1500`, or a range like `8pm-11pm`'
+          : '**time**: `3:00 PM`, `3pm`, `1500`, or a range like `12-4pm`',
         `Times are read as ${TIMEZONE_LABEL} time.`,
       ].join('\n'),
       ephemeral: true,
@@ -116,6 +134,7 @@ async function executeLfg(interaction, { mode, requireLocation, channelEnvVar, w
     day,
     time,
     scheduledAt: Math.floor(schedule.date.getTime() / 1000),
+    endAt: schedule.endDate ? Math.floor(schedule.endDate.getTime() / 1000) : null,
     location,
     note,
     army,
@@ -150,7 +169,7 @@ async function executeGamesList(interaction, { mode, title, emptyMessage, headin
       : null;
 
     const value = [
-      `<t:${game.scheduled_at}:F>`,
+      whenText(game),
       `Requested by <@${game.requester_id}>${game.army ? ` (${game.army})` : ''}`,
       game.mission ? `Mission: ${game.mission}` : null,
       `${rsvps.length} can make it`,

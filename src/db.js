@@ -14,7 +14,8 @@ db.exec(`
     day           TEXT NOT NULL,
     time          TEXT NOT NULL,
     scheduled_at  INTEGER NOT NULL, -- unix seconds, resolved from day+time
-    location      TEXT NOT NULL,    -- '' for tts games, which have no physical location
+    end_at        INTEGER,          -- unix seconds; only set when a time range was given
+    location     TEXT NOT NULL,    -- '' for tts games, which have no physical location
     note          TEXT,
     army          TEXT,             -- requester's optional "what army" answer
     mission       TEXT,             -- requester's optional primary mission pick
@@ -33,18 +34,23 @@ db.exec(`
   );
 `);
 
-// Databases created before /lfgtts existed have no `mode` column. Add it in
-// place — every pre-existing game was an in-person one, which the default
-// covers — so upgrading doesn't require wiping games.db.
+// Add columns introduced after a database was first created, in place, so
+// upgrading never requires wiping games.db.
 const gameColumns = db.prepare('PRAGMA table_info(games)').all().map(c => c.name);
 if (!gameColumns.includes('mode')) {
+  // Every game from before /lfgtts existed was an in-person one, which the
+  // default covers.
   db.exec("ALTER TABLE games ADD COLUMN mode TEXT NOT NULL DEFAULT 'in_person'");
 }
+if (!gameColumns.includes('end_at')) {
+  // Existing games had a single start time and no range; NULL means that.
+  db.exec('ALTER TABLE games ADD COLUMN end_at INTEGER');
+}
 
-function createGame({ guildId, channelId, requesterId, day, time, scheduledAt, location, note, army, mission, mode }) {
+function createGame({ guildId, channelId, requesterId, day, time, scheduledAt, endAt, location, note, army, mission, mode }) {
   const stmt = db.prepare(`
-    INSERT INTO games (guild_id, channel_id, requester_id, day, time, scheduled_at, location, note, army, mission, mode, status, created_at)
-    VALUES (@guildId, @channelId, @requesterId, @day, @time, @scheduledAt, @location, @note, @army, @mission, @mode, 'open', @createdAt)
+    INSERT INTO games (guild_id, channel_id, requester_id, day, time, scheduled_at, end_at, location, note, army, mission, mode, status, created_at)
+    VALUES (@guildId, @channelId, @requesterId, @day, @time, @scheduledAt, @endAt, @location, @note, @army, @mission, @mode, 'open', @createdAt)
   `);
   const info = stmt.run({
     guildId,
@@ -53,6 +59,7 @@ function createGame({ guildId, channelId, requesterId, day, time, scheduledAt, l
     day,
     time,
     scheduledAt,
+    endAt: endAt || null,
     location: location || '',
     note: note || null,
     army: army || null,

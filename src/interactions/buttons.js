@@ -1,6 +1,7 @@
 const { ModalBuilder, TextInputBuilder, TextInputStyle, ActionRowBuilder } = require('discord.js');
 const db = require('../db');
-const { buildGameEmbed, buildGameComponents, gameLabel } = require('../embeds');
+const { buildGameEmbed, buildGameComponents } = require('../embeds');
+const { notifyUsers, messages } = require('../notifications');
 
 async function handleButton(interaction) {
   const [action, gameIdRaw] = interaction.customId.split(':');
@@ -23,6 +24,7 @@ async function handleButton(interaction) {
         // Already in — clicking again backs out.
         db.removeRsvp(game.id, interaction.user.id);
         await refresh(interaction, game.id);
+        await notifyUsers(interaction, [game.requester_id], interaction.user.id, messages.backedOut(game, interaction.user.id));
         return;
       }
 
@@ -57,13 +59,8 @@ async function handleButton(interaction) {
       db.setStatus(game.id, 'confirmed');
       await refresh(interaction, game.id);
 
-      const rsvps = db.getRsvps(game.id);
-      if (rsvps.length > 0) {
-        const mentions = rsvps.map(r => `<@${r.userId}>`).join(' ');
-        await interaction.followUp({
-          content: `✅ ${gameLabel(game)} (<t:${game.scheduled_at}:F>) is confirmed! ${mentions}`,
-        });
-      }
+      const rsvpIds = db.getRsvps(game.id).map(r => r.userId);
+      await notifyUsers(interaction, rsvpIds, interaction.user.id, messages.confirmed(game));
       break;
     }
 
@@ -87,14 +84,10 @@ async function handleButton(interaction) {
       db.setStatus(game.id, 'cancelled');
       await refresh(interaction, game.id);
 
-      const notifyIds = new Set([game.requester_id, ...cancelledRsvps.map(r => r.userId)]);
-      notifyIds.delete(interaction.user.id);
-      if (notifyIds.size > 0) {
-        const mentions = [...notifyIds].map(id => `<@${id}>`).join(' ');
-        await interaction.followUp({
-          content: `🚫 ${gameLabel(game)} (<t:${game.scheduled_at}:F>) has been cancelled by <@${interaction.user.id}>. ${mentions}`,
-        });
-      }
+      // The requester is told too, for when a player cancels a confirmed game.
+      // notifyUsers drops whoever clicked, so nobody hears about their own action.
+      const notifyIds = [game.requester_id, ...cancelledRsvps.map(r => r.userId)];
+      await notifyUsers(interaction, notifyIds, interaction.user.id, messages.cancelled(game, interaction.user.id));
       break;
     }
 
@@ -114,6 +107,8 @@ async function handleRsvpModalSubmit(interaction) {
   }
 
   const army = interaction.fields.getTextInputValue('army').trim() || null;
+  // addRsvp ignores duplicates, so only announce a genuinely new RSVP.
+  const isNewRsvp = !db.hasRsvp(game.id, interaction.user.id);
   db.addRsvp(game.id, interaction.user.id, army);
 
   const updatedGame = db.getGame(gameId);
@@ -127,6 +122,10 @@ async function handleRsvpModalSubmit(interaction) {
     await interaction.update({ embeds: [embed], components });
   } else {
     await interaction.reply({ content: "You're in!", ephemeral: true });
+  }
+
+  if (isNewRsvp) {
+    await notifyUsers(interaction, [game.requester_id], interaction.user.id, messages.joined(game, interaction.user.id, army));
   }
 }
 

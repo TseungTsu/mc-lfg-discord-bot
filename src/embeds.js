@@ -14,6 +14,16 @@ const MODE_LABELS = {
 // Only the "open" title differs by mode; confirmed/cancelled read the same.
 const TTS_OPEN_TITLE = '🖥️ Looking for a Tabletop Simulator game';
 
+// <t:seconds:F> renders as a full date+time, auto-converted to each viewer's
+// own Discord timezone setting — e.g. "Saturday, September 20, 2026 3:00 PM".
+// When the game has an end time it's appended as a bare time (<t:...:t>), e.g.
+// "... 12:00 PM – 4:00 PM". `relative` adds "in 3 days" for the start.
+function whenText(game, { relative = false } = {}) {
+  const start = `<t:${game.scheduled_at}:F>`;
+  const span = game.end_at ? `${start} – <t:${game.end_at}:t>` : start;
+  return relative ? `${span} (<t:${game.scheduled_at}:R>)` : span;
+}
+
 // Short description of a game for follow-up messages, e.g. "Game #4 at Main
 // St Courts" or "Game #5 (Tabletop Simulator)".
 function gameLabel(game) {
@@ -26,10 +36,7 @@ function buildGameEmbed(game, rsvps) {
   const meta = STATUS_META[game.status] || STATUS_META.open;
   const title = game.status === 'open' && game.mode === 'tts' ? TTS_OPEN_TITLE : meta.title;
 
-  // <t:seconds:F> renders as a full date+time, auto-converted to each
-  // viewer's own Discord timezone setting — e.g. "Saturday, September 20,
-  // 2026 3:00 PM". <t:seconds:R> adds a relative "in 3 days" alongside it.
-  const when = `<t:${game.scheduled_at}:F> (<t:${game.scheduled_at}:R>)`;
+  const when = whenText(game, { relative: true });
 
   const embed = new EmbedBuilder()
     .setColor(meta.color)
@@ -104,4 +111,4 @@ function buildGameComponents(game) {
   return [row];
 }
 
-module.exports = { buildGameEmbed, buildGameComponents, gameLabel };
+module.exports = { buildGameEmbed, buildGameComponents, gameLabel, whenText };

@@ -28,14 +28,15 @@ make it, and the original requester clicks a button to confirm the game is on.
   asks (optionally) what army they're bringing, then the embed updates live
   with the list of people who are in, each with their army if they gave one.
   Clicking the button again (after already being in) removes your RSVP.
+  The requester is notified either way (see [Notifications](#notifications)).
 - **"Accept game" button** — Only the original requester can click this. It
-  locks the post as confirmed (✅), disables further RSVPs, and pings
-  everyone who RSVP'd in a follow-up message so they know it's on.
+  locks the post as confirmed (✅), disables further RSVPs, and notifies
+  everyone who RSVP'd so they know it's on.
 - **"Cancel" button** — Before a game is confirmed, only the requester can
   cancel it. Once confirmed, any player who RSVP'd can also cancel on
   everyone's behalf if they can't make it after all. Either way it marks
-  the post cancelled (🚫) and pings the requester and everyone who RSVP'd
-  (except whoever clicked) so they know it fell through.
+  the post cancelled (🚫) and notifies the requester and everyone who
+  RSVP'd (except whoever clicked) so they know it fell through.
 - **`/games`** — Lists every currently open **in-person** game in the server,
   with a jump link to each post, so people don't have to scroll to find them.
 - **`/gamestts`** — Same, but only open **Tabletop Simulator** games. Neither
@@ -45,7 +46,33 @@ Games and RSVPs are stored in a local SQLite database (`games.db`), so nothing
 is lost if the bot restarts. In-person and TTS games share one table, tagged
 with a `mode` column (`in_person` or `tts`); the list commands filter on it.
 An existing `games.db` is upgraded automatically on startup — earlier games
-are kept and treated as in-person.
+are kept and treated as in-person, with no end time.
+
+### Notifications
+
+People are notified when something happens to a game they care about:
+
+| What happened | Who is notified |
+|---|---|
+| Someone clicks **I can make it** | The requester ("🙋 @user can make it…", with their army if given) |
+| Someone who was in clicks the button again to back out | The requester ("😕 @user backed out…") |
+| The requester clicks **Accept game** | Everyone who RSVP'd ("✅ … has been confirmed!") |
+| The requester (or, once confirmed, a player) clicks **Cancel** | The requester and everyone who RSVP'd ("🚫 … has been cancelled by @user.") |
+
+Every notification includes the game's time and a link back to the post.
+
+**Delivery:** the bot DMs each person first. If a DM can't be sent (they
+have DMs from server members turned off, or have blocked the bot), it falls
+back to a message in the game's channel that `@mentions` them. When several
+people's DMs fail at once (accept/cancel), they're all mentioned together in
+a single message rather than one message each. The mention is in the message
+text on purpose — a mention inside an embed doesn't trigger a real Discord
+notification.
+
+Nobody is ever notified about their own action, so a requester who RSVPs to
+or cancels their own game gets no message. Clicking "I can make it" twice
+doesn't notify twice. Notification failures never affect the game itself.
+No extra bot permissions or gateway intents are needed for any of this.
 
 ### Accepted day/time formats
 
@@ -60,6 +87,17 @@ are kept and treated as in-person.
   - **`/lfg` (in person) still guesses** for bare times: an hour under 10
     is assumed PM (stores are open 10-10), otherwise it's read as typed —
     so `1000` is 10 AM.
+- **time ranges**: give a start and an end to say how long you'll be
+  around — `12-4pm`, `1200-4`, `noon-4pm`, `3pm to 6pm`, `1500-1800`,
+  `8pm-midnight`. The post shows it as "Saturday, September 20, 2026 12:00
+  PM – 4:00 PM". You can leave am/pm off one or both ends and the bot picks
+  the shortest sensible reading, so `1200-4` is noon–4 PM and `7-10` is
+  7–10 PM. For `/lfgtts`, at least one end needs am/pm (or be 24-hour):
+  `8-11pm` is fine, `8-11` is not.
+  - **A game is always a single day.** The end has to be later than the
+    start on the same day, so `9pm-1am` is rejected (post two games, or end
+    at `midnight`). The bot also rejects a range that starts and ends at the
+    same time, like `3pm-3pm`.
 
 **Timezone:** all typed times are read in one community timezone —
 `America/Denver` by default, changeable with `TIMEZONE` in `.env` — no matter
@@ -232,6 +270,7 @@ src/
   db.js                 SQLite persistence (games + rsvps)
   embeds.js             Builds the embed + buttons shown for a game
   lfgShared.js          Logic shared by the in-person and TTS commands
+  notifications.js      DM-first notifications (with batched channel fallback)
   parseDateTime.js      Parses the loose day/time input into a real Date
   commands/
     lfg.js              /lfg — post a new in-person game

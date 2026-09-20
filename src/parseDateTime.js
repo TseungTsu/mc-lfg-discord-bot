@@ -109,6 +109,91 @@ function applyMeridiem(hour, minute, meridiem, leadingZero = false) {
   return { hour, minute, explicit };
 }
 
+// --- Time ranges -----------------------------------------------------------
+// "12-4pm", "1200-4", "noon-4pm", "9pm-1am", "3pm to 6pm".
+
+const RANGE_SEPARATOR = /^(.+?)\s*(?:-|–|—|\bto\b)\s*(.+)$/i;
+
+const minutesOf = ({ hour, minute }) => hour * 60 + minute;
+
+// One end of a range. Like parseTime, but also accepts a bare hour ("4") since
+// the other end usually supplies the context. Ambiguous ends carry both
+// candidate readings (AM and PM) plus the single-time guess `lenient`.
+function parseEndpoint(input) {
+  const parsed = parseTime(input);
+  if (parsed) {
+    if (parsed.explicit) return { explicit: true, hour: parsed.hour, minute: parsed.minute };
+    return {
+      explicit: false,
+      lenient: { hour: parsed.hour, minute: parsed.minute },
+      candidates: [parsed.hour % 12, (parsed.hour % 12) + 12].map(hour => ({ hour, minute: parsed.minute })),
+    };
+  }
+
+  const m = input.trim().match(/^(\d{1,2})$/);
+  if (!m) return null;
+  const hour = Number(m[1]);
+  if (hour > 23) return null;
+  if (hour === 0 || hour >= 13) return { explicit: true, hour, minute: 0 };
+  return {
+    explicit: false,
+    // Same guess as a single time: an hour under 10 is PM (stores are open 10-10).
+    lenient: { hour: hour < 10 ? hour + 12 : hour, minute: 0 },
+    candidates: [hour % 12, (hour % 12) + 12].map(h => ({ hour: h, minute: 0 })),
+  };
+}
+
+// Returns null if `input` isn't a range at all (so the caller treats it as a
+// single time), { error } if it is one but can't be used, or
+// { start, end } as { hour, minute } in 24h time.
+//
+// A game is always a single day: the end must be later than the start on the
+// same day. The one exception is an end of 12:00 AM ("10pm-midnight"), which
+// is read as the very end of the start's day and comes back as hour 24.
+// Errors: 'format', 'ambiguous-time', 'invalid-range' (same start and end),
+// 'overnight' (the end is before the start, so it would run past midnight).
+function parseTimeRange(input, { requireMeridiem = false } = {}) {
+  const sep = input.trim().match(RANGE_SEPARATOR);
+  if (!sep) return null;
+
+  const from = parseEndpoint(sep[1]);
+  const to = parseEndpoint(sep[2]);
+  if (!from || !to) return { error: 'format' };
+
+  // With am/pm missing on both ends nothing pins the range down; where the
+  // caller wants certainty (TTS), don't guess.
+  if (!from.explicit && !to.explicit && requireMeridiem) return { error: 'ambiguous-time' };
+
+  const readings = ep => (ep.explicit ? [{ hour: ep.hour, minute: ep.minute }] : ep.candidates);
+  const atEndOfDay = (start, end) => (minutesOf(end) === 0 && minutesOf(start) > 0 ? { hour: 24, minute: 0 } : end);
+
+  // Every start/end reading that forms a same-day range.
+  const pairs = [];
+  let sameTime = false;
+  for (const start of readings(from)) {
+    for (const rawEnd of readings(to)) {
+      const end = atEndOfDay(start, rawEnd);
+      if (minutesOf(end) === minutesOf(start)) sameTime = true;
+      else if (minutesOf(end) > minutesOf(start)) pairs.push({ start, end });
+    }
+  }
+  // "3-3pm": they typed the same clock time twice, which we won't stretch
+  // into a 12-hour range.
+  if (sameTime) return { error: 'invalid-range' };
+  if (pairs.length === 0) return { error: 'overnight' };
+
+  // Prefer the shortest range ("12-4" is noon to 4 PM, not midnight to 4 PM
+  // or noon to 4 AM). When AM and PM read equally short ("12-4" could also be
+  // midnight to 4 AM), fall back to the guess a lone start time would get.
+  const startGuess = from.explicit ? null : minutesOf(from.lenient);
+  const closenessToGuess = p => (startGuess === null ? 0 : Math.abs(minutesOf(p.start) - startGuess));
+  pairs.sort((a, b) =>
+    (minutesOf(a.end) - minutesOf(a.start)) - (minutesOf(b.end) - minutesOf(b.start))
+    || closenessToGuess(a) - closenessToGuess(b));
+
+  return pairs[0];
+}
+
 // --- Timezone helpers ------------------------------------------------------
 // Node can format a moment in any IANA timezone (Intl) but can't build a Date
 // from wall-clock fields in one, so we do both directions here.
@@ -175,19 +260,36 @@ function isRealDate(year, month, day) {
 // Combines a parsed day + time into a concrete Date, resolving an ambiguous
 // (month-less) day to the next upcoming occurrence. All of it is read in
 // `timeZone`. With `requireMeridiem`, a time that could be AM or PM is
-// rejected instead of guessed. Returns { date } or
-// { error: 'format' | 'invalid-date' | 'ambiguous-time' }.
+// rejected instead of guessed. The time may be a range ("12-4pm"), in which
+// case `endDate` is returned too — always on the same day as `date`. Returns
+// { date, endDate? } or { error: 'format' | 'invalid-date' | 'ambiguous-time'
+// | 'invalid-range' | 'overnight' }.
 function resolveSchedule(dayInput, timeInput, options = {}) {
-  const {
-    referenceDate = new Date(),
-    timeZone = DEFAULT_TIMEZONE,
-    requireMeridiem = false,
-  } = options;
+  const { timeZone = DEFAULT_TIMEZONE, requireMeridiem = false } = options;
 
+  const range = parseTimeRange(timeInput, { requireMeridiem });
+  if (range && range.error) return { error: range.error };
+
+  const timeParts = range ? range.start : parseTime(timeInput);
+  if (!timeParts) return { error: 'format' };
+  if (!range && requireMeridiem && !timeParts.explicit) return { error: 'ambiguous-time' };
+
+  const result = resolveStart(dayInput, timeParts, options);
+  if (result.error || !range) return result;
+
+  // The end is on the start's calendar day in the community timezone (hour 24
+  // means midnight at the very end of that day).
+  const day = zonedParts(result.date, timeZone);
+  return {
+    date: result.date,
+    endDate: wallToDate(day.year, day.month, day.day, range.end.hour, range.end.minute, timeZone),
+  };
+}
+
+// Resolves the day + a single already-parsed start time to a concrete Date.
+function resolveStart(dayInput, timeParts, { referenceDate = new Date(), timeZone = DEFAULT_TIMEZONE } = {}) {
   const dayParts = parseDay(dayInput);
-  const timeParts = parseTime(timeInput);
-  if (!dayParts || !timeParts) return { error: 'format' };
-  if (requireMeridiem && !timeParts.explicit) return { error: 'ambiguous-time' };
+  if (!dayParts) return { error: 'format' };
 
   const { hour, minute } = timeParts;
   const nowMs = referenceDate.getTime();
@@ -237,5 +339,6 @@ module.exports = {
   assertValidTimeZone,
   parseDay,
   parseTime,
+  parseTimeRange,
   resolveSchedule,
 };
